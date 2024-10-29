@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertidor de Temperatura Neural</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #00f7ff;
+            --secondary-color: #1a1a2e;
+            --accent-color: #4e54c8;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--secondary-color), #16213e);
+            color: #fff;
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        .container {
+            max-width: 800px;
+        }
+
+        .gradient-border {
+            position: relative;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3px;
+        }
+
+        .gradient-border::before {
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+            border-radius: 22px;
+            z-index: -1;
+            animation: borderAnimation 4s ease infinite;
+        }
+
+        @keyframes borderAnimation {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+
+        .card {
+            background: rgba(26, 26, 46, 0.8);
+            border: none;
+            border-radius: 20px;
+        }
+
+        .card-header {
+            background: rgba(78, 84, 200, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px 20px 0 0 !important;
+            font-size: 1.2rem;
+            color: var(--primary-color);
+        }
+
+        .form-range::-webkit-slider-thumb {
+            background: var(--primary-color);
+        }
+
+        .form-range::-webkit-slider-runnable-track {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .result-box {
+            background: rgba(0, 247, 255, 0.1);
+            border: 1px solid rgba(0, 247, 255, 0.3);
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--primary-color);
+            text-shadow: 0 0 10px rgba(0, 247, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .loading-indicator {
+            color: var(--primary-color);
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 247, 255, 0.1);
+            border-left-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+
+        .form-label {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+
+        #lbl-celsius {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .logo-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+        }
+
+        .logo-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 140px;
+            height: 140px;
+            background: radial-gradient(circle, rgba(0, 247, 255, 0.2) 0%, rgba(0, 247, 255, 0) 70%);
+            animation: glowPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes glowPulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+        }
+
+        .display-5 {
+            background: linear-gradient(45deg, #fff, var(--primary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .status-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .status-badge.success {
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            color: #00ff00;
+        }
+
+        .status-badge.error {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="status-badge" id="statusBadge"></div>
+    <main>
+        <div class="px-4 py-5 my-5 text-center">
+            <div class="logo-container mb-4">
+                <div class="logo-glow"></div>
+                <img class="d-block mx-auto" src="logo_Senati.png" alt="SENATI Logo" width="120" height="120">
+            </div>
+            <h1 class="display-5 mb-4">Convertidor Neural de Temperatura</h1>
+            <div class="col-lg-6 mx-auto">
+                <p class="mb-4 text-light opacity-75">Conversión inteligente de Celsius a Fahrenheit usando redes neuronales</p>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="gradient-border">
+                <div class="card">
+                    <div class="card-header">
+                        Convertidor de Temperatura
+                    </div>
+                    <div class="card-body">
+                        <div id="loadingIndicator" class="loading-indicator">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando modelo neural...</p>
+                        </div>
+                        <form id="conversionForm" style="display: none;">
+                            <div class="mb-4">
+                                <label for="celsius" class="form-label">Temperatura en Celsius: <span id="lbl-celsius">0</span>°C</label>
+                                <input type="range" class="form-range" min="-100" max="100" value="0" step="1" id="celsius" oninput="realizarPrediccion();">
+                                <div class="form-text text-light opacity-75">Desliza para ajustar la temperatura</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="resultado" class="form-label">Temperatura Convertida</label>
+                                <div id="resultado" class="result-box">
+                                    0°C equivale a 32°F
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="text/javascript">
+        let modelo = null;
+
+        // Función para mostrar el estado
+        function mostrarEstado(mensaje, tipo) {
+            const badge = document.getElementById('statusBadge');
+            badge.textContent = mensaje;
+            badge.className = 'status-badge ' + tipo;
+            badge.style.opacity = '1';
+            setTimeout(() => badge.style.opacity = '0', 3000);
+        }
+
+        // Crear un modelo simple de conversión si falla la carga
+        function crearModeloRespaldo() {
+            const model = tf.sequential();
+            model.add(tf.layers.dense({
+                units: 1,
+                inputShape: [1],
+                weights: [
+                    tf.tensor2d([[1.8]]), // Multiplicador para C a F
+                    tf.tensor1d([32]) // Offset para C a F
+                ]
+            }));
+            return model;
+        }
+
+        // Función para cargar el modelo
+        async function cargarModelo() {
+            try {
+                document.getElementById('loadingIndicator').style.display = 'block';
+                document.getElementById('conversionForm').style.display = 'none';
+
+                try {
+                    // Intentar cargar el modelo guardado
+                    modelo = await tf.loadLayersModel('model/model.json');
+                } catch (loadError) {
+                    console.warn('No se pudo cargar el modelo guardado, usando modelo de respaldo:', loadError);
+                    modelo = crearModeloRespaldo();
+                    mostrarEstado('Usando convertidor básico', 'success');
+                }
+
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('conversionForm').style.display = 'block';
+                mostrarEstado('Modelo listo', 'success');
+
+            } catch (error) {
+                console.error('Error al inicializar el modelo:', error);
+                mostrarEstado('Error en la inicialización', 'error');
+                
+                // Intentar usar el modelo de respaldo como última opción
+                try {
+                    modelo = crearModeloRespaldo();
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    document.getElementById('conversionForm').style.display = 'block';
+                    mostrarEstado('Usando convertidor básico', 'success');
+                } catch (fallbackError) {
+                    document.getElementById('loadingIndicator').innerHTML = `
+                        <div class="alert alert-danger">
+                            Error crítico. Por favor, recarga la página.
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Función para realizar la predicción
+        async function realizarPrediccion() {
+            if (!modelo) return;
+
+            try {
+                const celsius = parseFloat(document.getElementById('celsius').value);
+                document.getElementById('lbl-celsius').textContent = celsius;
+
+                // Realizar predicción
+                const tensor = tf.tensor2d([[celsius]]);
+                const prediccion = modelo.predict(tensor);
+                const fahrenheit = await prediccion.data();
+
+                // Mostrar resultado
+                document.getElementById('resultado').innerHTML = 
+                    `${celsius}°C equivale a ${Math.round(fahrenheit[0] * 10) / 10}°F`;
+
+                // Limpiar tensores
+                tensor.dispose();
+                prediccion.dispose();
+
+            } catch (error) {
+                console.error('Error en la predicción:', error);
+                mostrarEstado('Error en la conversión', 'error');
+                
+                // Intentar una conversión básica como fallback
+                try {
+                    const fahrenheit = (celsius * 9/5) + 32;
+                    document.getElementById('resultado').innerHTML = 
+                        `${celsius}°C equivale a ${Math.round(fahrenheit * 10) / 10}°F`;
+                } catch (fallbackError) {
+                    document.getElementById('resultado').innerHTML = 
+                        'Error en la conversión';
+                }
+            }
+        }
+
+        // Cargar el modelo al iniciar
+        window.addEventListener('load', cargarModelo);
+    </script>
+</body>
+</html
